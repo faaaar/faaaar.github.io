@@ -15,7 +15,7 @@ jQuery(document).ready(function ($) {
     "友善(Friendship)",
   ];
 
-  $("body").click(function (e) {
+  $("html").click(function (e) {
     var $i = $("<span style=\"user-select: none;\" />").text(words[word_idx]);
     var x = e.pageX;
     var y = e.pageY;
