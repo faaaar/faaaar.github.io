@@ -96,12 +96,12 @@ live2d:
     scale: 1
   display:
     superSample: 1
-    position: right
+    position: left
     width: 240
     height: 500
-    hOffset: 30
-    vOffset: 60
+    hOffset: 40
+    vOffset: 20
   mobile:
-    show: true
+    show: false
   react:
     opacity: 0.7
