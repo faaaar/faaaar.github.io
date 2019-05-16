@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestLongestPalindrome(t *testing.T) {
+func TestLongestPalindrome005(t *testing.T) {
 	type args struct {
 		s string
 	}
@@ -23,7 +23,7 @@ func TestLongestPalindrome(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 
 			wantList := strings.Split(tt.want, "|")
-			got := LongestPalindrome(tt.args.s)
+			got := LongestPalindrome005(tt.args.s)
 			isok := false
 			for _, want := range wantList {
 				if got == want {
@@ -33,7 +33,7 @@ func TestLongestPalindrome(t *testing.T) {
 			}
 
 			if !isok {
-				t.Errorf("LongestPalindrome() = %v, want %v", got, wantList)
+				t.Errorf("LongestPalindrome005() = %v, want %v", got, wantList)
 			}
 
 		})

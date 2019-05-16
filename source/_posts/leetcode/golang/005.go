@@ -12,8 +12,8 @@ package leetcode
 // 输入: "cbbd"
 // 输出: "bb"
 
-// LongestPalindrome 最长回文子串
-func LongestPalindrome(s string) string {
+// LongestPalindrome005 最长回文子串
+func LongestPalindrome005(s string) string {
 	l, r, slen := 0, 0, len(s)
 
 	if slen < 2 {
