@@ -15,6 +15,7 @@ func TestTwoSum001(t *testing.T) {
 		args args
 		want []int
 	}{
+		// TODO: Add test cases.
 		{"0", args{[]int{2, 7, 11, 15}, 9}, []int{0, 1}},
 		{"1", args{[]int{2, 7, 11, 15, 17}, 19}, []int{0, 4}},
 	}

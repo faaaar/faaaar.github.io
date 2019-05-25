@@ -12,6 +12,7 @@ func TestFindMedianSortedArrays004(t *testing.T) {
 		args args
 		want float64
 	}{
+		// TODO: Add test cases.
 		{"0", args{[]int{1, 2, 3}, []int{4, 5, 6}}, 3.5},
 		{"1", args{[]int{1, 2}, []int{3, 4, 5}}, 3.0},
 		{"2", args{[]int{1, 2}, []int{3, 4, 5, 6}}, 3.5},

@@ -14,6 +14,7 @@ func TestConvert006(t *testing.T) {
 		args args
 		want string
 	}{
+		// TODO: Add test cases.
 		{"0", args{"LEETCODEISHIRING", 1}, "LEETCODEISHIRING"},
 		{"1", args{"LEETCODEISHIRING", 3}, "LCIRETOESIIGEDHN"},
 		{"2", args{"LEETCODEISHIRING", 4}, "LDREOEIIECIHNTSG"},
