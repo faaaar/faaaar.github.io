@@ -35,12 +35,11 @@ tags:
 其中比较重要的点
 
 - next、prev 指针域，指向前一个和后一个mspan，说明mspan是一个双向链表。
-- span中存储的页的数量
-- npages: mspan 的大小为 page 大小的整数倍。
+- npages span中存储的页的数量, mspan 的大小为 page 大小的整数倍。
 - nelems span中可以存储元素的数量
 - freeindex 是一个大小在0到nelems的数字，用来标记下一次分配空间时开始扫描的位置，可以简单的理解为分配到了第几个区块。如果freeindex==nelem,说明当前span已经没有空闲空间了。
 - spanclass 0~_NumSizeClasses之间的一个值。是当前mspan的类型。不同类型的mspan所分割的区块的大小也不一样。该值与class_to_size中存储的值相关。
-- elemsize 元素大小。根据sizeclass计算得出。在分配大对象的时候，该值与npages相关，值为pagesize*npages。
+- elemsize 元素大小。根据sizeclass计算得出。在分配大对象的时候，该值与npages相关，值为`pagesize*npages`。
 
 ### mcache
 
@@ -64,8 +63,6 @@ tags:
 - spanclass 与mspan处的spanclass一致，所以我们可以推测mcentral也与mcache的alloc类似，有`numSpanClasses`个
 - nonempty 类型为[mSpanList](https://github.com/golang/go/blob/go1.12.5/src/runtime/mheap.go#L310 "mSpanList")的一个列表。其中包含了指向列表头和尾的指针。这个列表中存储了空闲的mspan的指针，当mcache中的mspan不够用的时候，可以向mcentral申请更多的空间。
 - empty 类型与nonempty相同，然而是存储了已经被申请走使用中(或者被mcache缓存起来)的mspan的指针。
-
-mcentral只要结合了nonempty和empty两个字段中的数据，就可以追踪到当前mcentral所分配出去的所有对象。
 
 ### mheap
 [mheap(点击查看结构定义)](https://github.com/golang/go/blob/go1.12.5/src/runtime/mheap.go#L31 "mheap(点击查看结构定义)")
