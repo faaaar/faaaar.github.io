@@ -183,11 +183,34 @@ Go的虚拟内存是由一组arena组成的，这一组arena组成我们所说�
   // operations.
   ```
 
-### 虚拟地址申请
-
 ### mheap初始化
 
+[点我查看mheap.init()](https://github.com/golang/go/blob/go1.12.5/src/runtime/mheap.go#L777 "点我查看mheap.init()")
+
+mheap结构在系统调用[mallocinit](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L359 "mallocinit")函数时执行。主要做了以下事情
+
+- 初始化各种结构的分配器
+- 初始化heap.central中各个类型的mcentral
+
 ### mcache初始化
+
+也是对当前G的M的初始化，需要先获取到当前的G
+
+```go
+_g_ := getg()
+_g_.m.mcache = allocmcache()
+```
+
+[allocmacache](https://github.com/golang/go/blob/go1.12.5/src/runtime/mcache.go#L19 "allocmcache")函数主要通过`mheap.cachealloc`从堆上划分一块内存，这期间mheap是加锁状态。之后初始化不同类型的span。
+
+
+### 虚拟地址申请
+
+[虚拟地址申请代码](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L397 "虚拟地址申请代码")
+
+程序在启动的时候，会根据当前系统信息构建一块虚拟内存。
+
+在64为操作系统上，程序根据不同的`GOARCH`和`GOOS`初始化`mehap.arenaHints`，一般填充的是一组通用的地址，然后会根据真正的arena的边界进行扩展增长。
 
 ## 内存分配
 
