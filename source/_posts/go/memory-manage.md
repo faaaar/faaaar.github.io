@@ -1,7 +1,7 @@
 ---
 title: Golang - 内存管理
 date: 2019-06-05
-updated: 2019-06-06
+updated: 2019-06-11
 categories:
     - Go
 tags:
@@ -214,13 +214,36 @@ _g_.m.mcache = allocmcache()
 
 ## 内存分配
 
+堆上内存分配调用了runtime包的[newobject](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L1067 "newobject")函数。
+
 ### 主要分配流程
 
-### 普通对象分配
+根据要分配的对象的大小使用不同的分配策略
+
+1. objectsize>32768，则使用heap直接进行分配
+2. objectsize<16&&noscan，则使用tiny分配器进行分配
+3. 其他情况根据对象具体大小使用不同的sizeclass来进行分配
 
 ### 大对象分配
 
+对于大于32K的对象来说，分配直接跳过了mcache和mcentral两个部分，直接通过调用[largeAlloc](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L1039 "largeAlloc")方法，先对齐然后计算所需要的整数页，然后使用mheap.alloc进行分配。
+
 ### 小对象分配
+
+使用[tiny allocator](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L863 "tiny allocator")进行小对象分配。tiny实际上只是一个指针，用来记录当前mspan(sizeclass=2&&noscan的元素)中内存的起始位置，通过tinyoffset计算当前对象应该分配在哪里。
+
+在分配过程中，先将要分配的对象的大小与tinyoffset进行地址对齐。如果当前块中还有剩余的空间而且足够，直接分配，并记录新的tinyoffset的值。如果不够则重新申请一个新的内存块，在简单初始化这块内存之后将对象分配进去，并记录tinyoffset和新的内存块的起始位置。
+
+### 普通对象分配
+[对象在16b和32K之间时的分配逻辑。](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L928 "对象在16b和32K之间时的分配逻辑。")
+
+1. 通过对象的大小以及是否含有指针(noscan)计算出应当分配的sizeclass，然后通过调用[nextFreeFast](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L749 "nextFreeFast")尝试进行分配(从mcache.allocc中分配)。
+
+2. 如果分配失败了，则调用[nextFree](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L776 "nextFree")方法尝试从mcentral或者mheap中申请更多内存使用。
+   - 在nextFree方法中调用[refill](https://github.com/golang/go/blob/go1.12.5/src/runtime/mcache.go#L119 "refill")向mcentral中申请内存。通过调用[cacheSpan](https://github.com/golang/go/blob/go1.12.5/src/runtime/malloc.go#L135 "cacheSpan")申请新的span。
+   - 如果在这个过程中，mcentral空了，则会调用[mcentral.grow](https://github.com/golang/go/blob/go1.12.5/src/runtime/mcentral.go#L251 "mcentral.grow")方法向堆申请空间。
+   - 如果堆空了则会调用[alloc_m](https://github.com/golang/go/blob/go1.12.5/src/runtime/mheap.go#L961 "alloc_m")方法向操作系统申请内存空间。
+
 
 ## 内存释放
 
