@@ -1,5 +1,5 @@
 ---
-title: Golang - 内存管理
+title: Golang - 内存分配
 date: 2019-06-05
 updated: 2019-06-11
 categories:
@@ -11,7 +11,9 @@ tags:
 
 # 内存管理
 
-查看的源码版本为1.12
+查看的源码版本为1.12。
+
+由于知识不足，理解很肤浅。在有了更深的理解之后持续更新。
 
 ## 基础结构
 
@@ -244,11 +246,10 @@ _g_.m.mcache = allocmcache()
    - 如果在这个过程中，mcentral空了，则会调用[mcentral.grow](https://github.com/golang/go/blob/go1.12.5/src/runtime/mcentral.go#L251 "mcentral.grow")方法向堆申请空间。
    - 如果堆空了则会调用[alloc_m](https://github.com/golang/go/blob/go1.12.5/src/runtime/mheap.go#L961 "alloc_m")方法向操作系统申请内存空间。
 
+## 总结
 
-## 内存释放
+之所以写这个内容，最开始是因为需要进行组内分享，想把自己看的内容给整理一下，然后好整理成PPT。然而在不知不觉中自己已经接触、了解到了远超分享本身需要准备的内容，这对我个人的成长是巨大的。
 
-### mcache
+回到标题本身来讲，虽然硬着头皮、强行写完了，然而很多内容是不理解的，可能需要其他知识点的辅助吧。Go的内存分配是基于`tcmalloc`的，之后会先去了解这块内容，进一步去理解整个内存分配的流程。如果能解开自己的一些疑惑当然是最好的，到时候也会再来一篇文章，或者更新本文来记录学习到的知识点。
 
-### mcentral
-
-### mheap
+End.
