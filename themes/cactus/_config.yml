@@ -128,8 +128,16 @@ open_graph:
 
 # Fill in your Disqus Comments Shortname to enable Disqus comments.
 disqus:
-  enabled: true
-  shortname: faaaar-github-io
+  enabled: false
+  shortname:
+
+valine:
+  enabled: true,
+  appId: u4oJM6rHvKVj43RdXEHjvtyY-gzGzoHsz
+  appKey: zhypviqQjLXble9iLijVLYnq
+  avatar: retro
+  placeholder: just go go
+  visitor: false
 
 # Fill in your Google Analytics tracking ID to enable Google Analytics.
 google_analytics:

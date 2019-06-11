@@ -5,3 +5,11 @@
         </div>
     </div>
 <% } %>
+
+<% if(page.comments && theme.valine.enabled){ %>
+    <div class="blog-post-comments">
+        <div id="valine_thread">
+            <noscript><%= __('comments.no_js') %></noscript>
+        </div>
+    </div>
+<% } %>

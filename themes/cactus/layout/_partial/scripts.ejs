@@ -64,16 +64,34 @@
 <% } %>
 <!-- Disqus Comments -->
 <% if (theme.disqus.enabled && theme.disqus.shortname){ %>
-    <script type="text/javascript">
-        var disqus_shortname = '<%= theme.disqus.shortname %>';
+  <script type="text/javascript">
+   var disqus_shortname = '<%= theme.disqus.shortname %>';
 
-        (function(){
-            var dsq = document.createElement('script');
-            dsq.type = 'text/javascript';
-            dsq.async = true;
-            dsq.src = '//' + disqus_shortname + '.disqus.com/<% if (page.comments){ %>embed.js<% } else { %>count.js<% } %>';
-            (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
-        }());
-    </script>
+   (function(){
+     var dsq = document.createElement('script');
+     dsq.type = 'text/javascript';
+     dsq.async = true;
+     dsq.src = '//' + disqus_shortname + '.disqus.com/<% if (page.comments){ %>embed.js<% } else { %>count.js<% } %>';
+     (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+   }());
+  </script>
 <% } %>
+
+<!-- Valine Comments -->
+<% if (theme.valine.enabled){ %>
+  <script src="//cdn1.lncld.net/static/js/3.0.4/av-min.js"></script>
+  <script src='//unpkg.com/valine/dist/Valine.min.js'></script>
+
+  <script type="text/javascript">
+   new Valine({
+     el:'#valine_thread',
+     appId: '<%= theme.valine.appId %>',
+     appKey: '<%= theme.valine.appKey %>',
+     avatar: '<%= theme.valine.avatar %>',
+     placeholder: '<%= theme.valine.placeholder %>',
+     visitor: <%= theme.valine.visitor %>,
+   })
+  </script>
+<% } %>
+
 <%- js('js/custome.js') %>
