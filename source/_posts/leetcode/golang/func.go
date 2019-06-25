@@ -7,4 +7,3 @@ func min(i, j int) int {
 
 	return j
 }
-q
