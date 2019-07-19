@@ -21,8 +21,8 @@ func NumTrees096(n int) int {
 	dp[0] = 1
 
 	for i := 1; i <= n; i++ {
-		for j := 0; j < i; j++ {
-			dp[i] += dp[j] * dp[i-j-1]
+		for j := 1; j <= i; j++ {
+			dp[i] += dp[j-1] * dp[i-j]
 		}
 	}
 
