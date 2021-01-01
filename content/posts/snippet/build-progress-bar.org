@@ -1,0 +1,38 @@
+#+HUGO_BASE_DIR: ../../../
+#+HUGO_SECTION: posts/snippet
+#+HUGO_TAGS: SNIPPET
+#+HUGO_CATEGORIES:
+#+HUGO_DRAFT: t
+#+HUGO_AUTO_SET_LASTMOD: nil
+
+#+DATE: 2020-11-27
+#+TITLE: 使用Go实现进度条
+#+AUTHOR: LIYUNFAN
+#+DESCRIPTION: hahahah...
+
+<!--more-->
+
+#+BEGIN_SRC go
+  package main
+
+  import (
+      "C"
+      "fmt"
+  )
+  import (
+      "os"
+      "strings"
+      "time"
+  )
+
+  func main() {
+      for i := 0; i < 50; i++ {
+          time.Sleep(100 * time.Millisecond)
+          h := strings.Repeat("=", i) + strings.Repeat(" ", 49-i)
+          fmt.Printf("\r%.0f%%[%s]", float64(i)/49*100, h)
+
+          os.Stdout.Sync()
+      }
+      fmt.Println("\nAll System Go!")
+  }
+#+END_SRC

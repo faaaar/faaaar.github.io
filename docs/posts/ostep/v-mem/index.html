@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh"><meta charset="utf-8"><meta name="generator" content="Hugo 0.79.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>OSTEP - 内存虚拟化&nbsp;&ndash;&nbsp;gccio.com</title><link rel="stylesheet" href="/css/core.min.34177bb140bda75c5226cdee3aae65595491ec58425d2a3bd01c2774b6f23162bd498b7e9ccb1ab4031d711b959df415.css" integrity="sha384-NBd7sUC9p1xSJs3uOq5lWVSR7FhCXSo70BwndLbyMWK9SYt&#43;nMsatAMdcRuVnfQV"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="OSTEP - 内存虚拟化" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="/"><span class="site name">gccio.com</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="/categories/">分类</a><a class="nav item" href="/tags/">标签</a></nav></div></span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">OSTEP - 内存虚拟化</h1><p class="article date">2020-09-26</p></section><article class="article markdown-body"><p>程序内打出来的内存地址并非真实的物理内存地址，而是程序独有的虚拟内存地址。</p>
+<p>操作系统为程序制造了一个独占了巨大的内存空间的假象，方便程序对内存进行时用，同时也更好的对程序所使用的内存进行保护，防止恶意程序进行篡改。</p>
+<h2 id="操作系统如何保证程序拥有独立的内存空间">操作系统如何保证程序拥有独立的内存空间</h2>
+<p>操作系统为每个程序分配一个巨大的虚拟内存空间，该空间中的每个地址与物理内存的地址具有一定的映射关系。</p>
+<p>程序在启动运行时需要三块内存空间：代码空间、堆、栈。它们在虚拟空间中以下图方式分布：</p>
+<span class="image-container"><span class="link" ><a href="https://cdnnnn.com/ostep/v-mem-1.jpg" 
+        target="_blank"><img class="img" src="https://cdnnnn.com/ostep/v-mem-1.jpg"/></a></span>
+</span>
+<p>操作系统为这三部分各分了一个段，每个分段都有一个基址寄存器、界限寄存器来存储它们在物理内存中的起点和内存段的大小。</p>
+<p>程序在访问内存中的值的时候，操作系统会根据程序所请求内存的虚拟内存地址计算出其偏移量，然后使用 <strong>基址+偏移量</strong> 来计算出真正所在的物理内存地址，并获得它的值。
+但是如果要访问内存的偏移量非法，例如为负数或者大于界限寄存器中存储的该段内存的大小，程序则会陷入错误，并交由操作系统处理。</p>
+<h2 id="操作系统如何快速查找虚拟内存对应的物理内存">操作系统如何快速查找虚拟内存对应的物理内存</h2>
+<p>为了提高从虚拟地址到物理地址的转化效率，操作系统使用了一些手段，包括多级页表、TLB快速地址转换等。</p>
+<h3 id="多级页表">多级页表</h3>
+<h4 id="页与页表">页与页表</h4>
+<p>操作系统会将程序的虚拟内存分成多个固定大小的区域，其中每个区域称之为一页，其对应的物理内存的区域称之为页帧(page frame)。通过此方法可以减少物理内存上的内存碎片。
+当然，分配的页并非能完整刚好被使用完，但通过程序对内存使用块的合理分配，可以尽可能的降低这其中浪费的部分。</p>
+<p>而为了记录这些页对应的物理内存的位置，操作系统为每个进程保存了一个数据结构，称为页表，来帮我们进行虚拟页面到物理内存你地址的转换。
+我们可以通过虚拟地址和页的大小，计算出虚拟页面号(virtual page number, VPN)和偏移量(offset)。
+然后在页表中根据对应的VPN和偏移量查找到页表中的页表单元(page-table entry, PTE)，其中存储了对应物理分页地址(physical frame number, PFN)，最后再根据偏移量找到指定的物理内存地址。</p>
+<div class="highlight"><pre class="chroma"><code class="language-text" data-lang="text">虚拟内存地址 -&gt; VPN + offset
+VPN -&gt; PTE -&gt; PFN
+PFN + offset -&gt; 物理内存地址
+</code></pre></div><h4 id="页表的缺点">页表的缺点</h4>
+<p>然而页表也是需要存储在内存中的，越庞大的地址空间、越小的页，所需要的内存空间页越大。</p>
+<p>举个例子，假如有32位的地址空间，页大小为4KB，那么偏移量则需要12位（2的12次方=4K），则VPN需要使用20位来表示。</p>
+<p>这意味着操作系统需要替每个进程保存2的20次方（100万左右）个地址转换项，假如每个页中的项需要4个字节来保存信息，400万字节大约等于4MB。</p>
+<p>假如有100个进程在运行，则单只是管理页表就需要400MB。</p>
+<p>注意，32位的操作系统的内存上线是4GB，这意味着单纯页表的开销就占内存的10%。如果64位的操作系统呢？</p>
+<p>有人提出通过尝试使用页表套页表来解决此问题。可以通过将VPN分为多部分，前面的为页表目录索引，后一段为PTE索引。在找到PTE读取到PFN之后，再根据偏移量找到需要的物理内存地址。</p>
+<h4 id="举个栗子">举个栗子</h4>
+<p>例如在16KB的地址空间中，其虚拟内存地址有14位（2的14次方为16K），页大小为64字节，则偏移量有6位，VPN有8位。14位的虚拟内存地址会按照如图的方式进行分配。</p>
+<span class="image-container"><span class="link" ><a href="https://cdnnnn.com/ostep/v-mem-2.jpg" 
+        target="_blank"><img class="img" src="https://cdnnnn.com/ostep/v-mem-2.jpg"/></a></span>
+</span>
+<p>该图中使用了一个两级页表进行存储。
+VPN的8位的前4位用于页目录,该页目录包含16条数据，每个项指向一个包含16个页的页表，再根据后4位计算出需要使用哪个页，再根据偏移量到页上查找对应的物理地址。</p>
+<span class="image-container"><span class="link" ><a href="https://cdnnnn.com/ostep/v-mem-3.jpg" 
+        target="_blank"><img class="img" src="https://cdnnnn.com/ostep/v-mem-3.jpg"/></a></span>
+</span>
+<h3 id="tlb快速地址转换">TLB快速地址转换</h3>
+<p>通过页表可以尽量快的找到VPN所对应的PFN，但尽管如此，我们读取一个内存地址上的指令时，依然需要额外的内存访问：访问页表、访问页、访问物理内存。</p>
+<p>人们想要让这一过程变得更快，于是引入了一个硬件：地址转换旁路缓冲器（translation-lookaside buffer, TLB）。</p>
+<h4 id="工作方式">工作方式</h4>
+<ol>
+<li>
+<p>从虚拟地址中提取VPN。</p>
+</li>
+<li>
+<p>检查TLB中是否有该VPN的转换映射。</p>
+<ul>
+<li>
+<p>如果有，则说明命中了缓存，则从缓存中读取对应的页帧号，并与偏移量共同计算出所处的物理内存地址。</p>
+</li>
+<li>
+<p>如果没有，则说明未名中缓存，则按照正常逻辑进行寻址，并将最终的结果存入TLB，以便下次获取。</p>
+</li>
+</ul>
+</li>
+</ol>
+<p>这个过程看起来与平时用到的缓存机制很相似，例如先读取redis缓存，如果没有就读数据库，将数据缓存入redis。</p>
+<h4 id="上下文切换时tlb的处理方式">上下文切换时TLB的处理方式</h4>
+<p>由于每个程序都有自己独立页表，那么TLB中存储的VPN到PFN的映射也只是当前程序的。
+当进程之间发生切换时候，操作系统自然需要对TLB同时进行上下文切换。</p>
+<p>方法之一是每次上下文切换时，都清空TLB的缓存内容。此方法简单粗暴，但性能不佳。</p>
+<p>所以采用另一个方法，通过在TLB项中添加地址空间标识符（ASID），可以简单粗暴的理解为PID。不同进程在读取TLB项的时候可以通过该标识使用属于自己进程的转换。</p>
+<h4 id="tlb缓存淘汰策略">TLB缓存淘汰策略</h4>
+<p>与普通的缓存系统一样，TLB在一定情况之后需要对已有的缓存进行淘汰方便存储新的缓存项。其策略包括LFU/LRU/ARC/FIFO/MRU等等。
+对于这些缓存淘汰策略，等我了解了再开新篇写来讨论。</p>
+<p>但不管那种策略，目标都是提升TLB缓存的命中率。</p>
+<h2 id="操作系统如何支持程序可以使用超过物理内存的虚拟内存">操作系统如何支持程序可以使用超过物理内存的虚拟内存</h2>
+<p>对于操作系统上的程序们而言，物理内存可能并不能足够支撑他们同时运行，那么就需要找一个地方来存储那些原本存储在内存里的内容。</p>
+<p>通常情况下会选择硬盘。在linux系统中，我们也可以看到会有一个 <strong>swap</strong> 类型的分区，该分区就是操作系统用来临时缓存内存中页的地方。</p>
+<h3 id="如何实现交换分区">如何实现交换分区</h3>
+<p>首先要在硬盘上找一块地儿来当做交换空间。当操作系统需要的时候，就可以将内存中的内容与硬盘进行交换。</p>
+<p>但事情肯定不会这么简单。在使用内存的TLB机制时会产生两个问题</p>
+<p>1.如何让操作系统知道内存页被交换到了硬盘上
+2.如何让操作系统知道内存页在硬盘上的位置？</p>
+<p><strong>问题一：如何让操作系统知道内存页被交换到了硬盘上？</strong></p>
+<p>可以通过在PTE中的一位新增一条信息，即 <strong>存在位</strong> 的标记。如果该内存页存在于物理内存中，则设置为1，否则设置为0。</p>
+<p>当要访问不在物理内存中的页的时候，则抛出一个 <strong>页错误</strong> ，并陷入操作系统，交由操作系统的错误处理程序进行处理。
+此时操作系统便知道要到硬盘上将目标页从硬盘上交换回内存。</p>
+<p><strong>问题二：如何让操作系统知道内存页在硬盘上的位置？</strong></p>
+<p>有了第一个问题的解决思路，第二个问题的思路实际上也很简单，在PTE中增加缓存的物理内存地址。</p>
+<p>操作系统会根据PTE上的地址从硬盘上读取内容并存回内存，在io操作完成后，操作系统更新页表将此PTE的 <strong>存在位</strong> 标记为 <strong>存在</strong> 、物理内存的映射地址更新为回存的地址，之后重试读取内存的指令。</p>
+<h3 id="交换哪些页到硬盘上">交换哪些页到硬盘上</h3>
+<p>实际上这个问题与 <strong>TLB缓存淘汰策略</strong> 有一定程度的相似，目标都是尽量降低缓存失效的概率。
+对于内存交换来说，则是尽量降低在未来时间内存与硬盘交换的次数。</p>
+<h2 id="总结">总结</h2>
+<ol>
+<li>使用巨大的虚拟内存空间来 <strong>欺骗</strong> 程序，让程序运行的更安全。</li>
+<li>使用多级页表来管理虚拟内存到物理内存以及物理内存到硬盘上的映射关系和数据，同时使用TLB来加速每次的内存访问速度。</li>
+<li>使用内存于硬盘的数据交换，来获得 <strong>更大</strong> 的内存空间，将当前不用的内存页交换到硬盘上。</li>
+</ol>
+<p>同时对于TLB和内存交换，都需要一种智能的、可以根据过去对未来有一定预测能力的策略来进行缓存的淘汰。</p>
+</article><section class="article labels"><a class="tag" href=/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AF%BC%E8%AE%BA/>操作系统导论</a></section></div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="/posts/kubeedge/introduction/"><span class="iconfont icon-article"></span>KUBEEDGE - 简单了解Kubeedge的部分内容</a></p><p><a class="link" href="/posts/ostep/v-cpu/"><span class="iconfont icon-article"></span>OSTEP - CPU虚拟化</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">© Copyright Gccio</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank">Notepadium</a></p></div></section></body>
+
+</html>

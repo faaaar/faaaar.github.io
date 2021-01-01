@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh"><meta charset="utf-8"><meta name="generator" content="Hugo 0.79.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>gccio.com</title><link rel="stylesheet" href="/css/core.min.34177bb140bda75c5226cdee3aae65595491ec58425d2a3bd01c2774b6f23162bd498b7e9ccb1ab4031d711b959df415.css" integrity="sha384-NBd7sUC9p1xSJs3uOq5lWVSR7FhCXSo70BwndLbyMWK9SYt&#43;nMsatAMdcRuVnfQV"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="/"><span class="site name">gccio.com</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="/categories/">分类</a><a class="nav item" href="/tags/">标签</a></nav></div></span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title"></h1></section><article class="article markdown-body"><h1 class="title"><p>使用Go实现进度条</p>
+</h1>
+<p>
+&lt;!–more–&gt;</p>
+<div class="src src-go">
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go">  <span class="kn">package</span> <span class="nx">main</span>
+
+  <span class="kn">import</span> <span class="p">(</span>
+      <span class="s">&#34;C&#34;</span>
+      <span class="s">&#34;fmt&#34;</span>
+  <span class="p">)</span>
+  <span class="kn">import</span> <span class="p">(</span>
+      <span class="s">&#34;os&#34;</span>
+      <span class="s">&#34;strings&#34;</span>
+      <span class="s">&#34;time&#34;</span>
+  <span class="p">)</span>
+
+  <span class="kd">func</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+      <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="mi">50</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+          <span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="mi">100</span> <span class="o">*</span> <span class="nx">time</span><span class="p">.</span><span class="nx">Millisecond</span><span class="p">)</span>
+          <span class="nx">h</span> <span class="o">:=</span> <span class="nx">strings</span><span class="p">.</span><span class="nf">Repeat</span><span class="p">(</span><span class="s">&#34;=&#34;</span><span class="p">,</span> <span class="nx">i</span><span class="p">)</span> <span class="o">+</span> <span class="nx">strings</span><span class="p">.</span><span class="nf">Repeat</span><span class="p">(</span><span class="s">&#34; &#34;</span><span class="p">,</span> <span class="mi">49</span><span class="o">-</span><span class="nx">i</span><span class="p">)</span>
+          <span class="nx">fmt</span><span class="p">.</span><span class="nf">Printf</span><span class="p">(</span><span class="s">&#34;\r%.0f%%[%s]&#34;</span><span class="p">,</span> <span class="nb">float64</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span><span class="o">/</span><span class="mi">49</span><span class="o">*</span><span class="mi">100</span><span class="p">,</span> <span class="nx">h</span><span class="p">)</span>
+
+          <span class="nx">os</span><span class="p">.</span><span class="nx">Stdout</span><span class="p">.</span><span class="nf">Sync</span><span class="p">()</span>
+      <span class="p">}</span>
+      <span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;\nAll System Go!&#34;</span><span class="p">)</span>
+  <span class="p">}</span>
+</code></pre></div>
+</div>
+</article></div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="/posts/ostep/v-cpu/"><span class="iconfont icon-article"></span>OSTEP - CPU虚拟化</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">© Copyright Gccio</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank">Notepadium</a></p></div></section></body>
+
+</html>

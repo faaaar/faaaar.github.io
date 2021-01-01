@@ -1,0 +1,422 @@
+#+HUGO_BASE_DIR: ../../../../
+#+HUGO_SECTION: posts/kubeedge/beehive
+#+HUGO_TAGS: KUBEEDGE
+#+HUGO_CATEGORIES:
+#+HUGO_DRAFT: nil
+#+HUGO_AUTO_SET_LASTMOD: nil
+
+#+DATE: 2020-11-11
+#+TITLE: KUBEEDGE - 模块之间的通信机制
+#+AUTHOR: LIYUNFAN
+#+DESCRIPTION: KubeEdge的cloudcore和edgecore都是由很多模块组成的。而模块之间的通信，则是使用了一个名为 *beehive* 的组件实现的。
+
+KubeEdge的cloudcore和edgecore都是由很多模块组成的。而模块之间的通信，则是使用了一个名为 *beehive* 的组件实现的。
+
+<!--more-->
+
+*beehive* 组件虽然以单独的包发布出去了，但在KubeEdge中并未使用 *go mod* 的方式引入。
+而是将组件存放于 *staging* 文件夹下。
+
+找到代码后，开始通过阅读代码的方式了解该组件，进而了解KubeEdge模块之间的通信机制。
+
+从cloudcore的入口代码(/cloud/app/server.go)中看到，beehive组件启动是通过 *core.Run* 启动的。
+所以先从 *github.com/kubeedge/beehive/pkg/core* 这个包看起。
+
+* core.Run-Beehive启动
+
+该函数非常简单，就做了两件事
+
+1. 启动所有注册到beehive中的模块，执行模块的 *Start* 函数。
+2. 优雅退出。
+
+#+BEGIN_SRC go
+  // beehive的启动函数，在启动时候会执行所有注册模块的Start方法
+  func Run() {
+      // 启动所有注册模块
+      StartModules()
+      // 监听系统信号，优雅退出
+      GracefulShutdown()
+  }
+#+END_SRC
+
+优雅退出这部分与beehive的功能关系不大，所以不关注。
+
+StartModules函数则是整个组件启动的关键所在。
+
+#+BEGIN_SRC go
+  func StartModules() {
+      beehiveContext.InitContext(beehiveContext.MsgCtxTypeChannel)
+      // 获取所有注册的模块
+      modules := GetModules()
+      for name, module := range modules {
+          // 添加模块，并为模块创建一个channel用于接收消息
+          beehiveContext.AddModule(name)
+          // 添加该模块到所属的组
+          beehiveContext.AddModuleGroup(name, module.Group())
+          // 启动模块
+          go module.Start()
+          klog.Infof("Starting module %v", name)
+      }
+  }
+#+END_SRC
+首先通过 *beehiveContext.InitContext* 函数初始化了beehiveContext，确定了使用channel作为信息传输的方式。
+实际上beehive目前也只实现了channel的方式。对于 *ChannelContext* 的具体实现后面再聊。
+
+然后获取所有注册的模块，遍历模块将模块和模块所属的组加入到上下文中，启动模块。
+
+此处有两个问题
+1. 如何声明定义一个模块
+2. 如何将模块注册到beehive中
+
+** 如何声明定义一个模块
+
+由于beehive的modules中存放的是 *Module* 类型的数据。所以定义一个模块只要实现了 *Module* 接口即可。
+#+BEGIN_SRC go
+  type Module interface {
+      Name() string  // 模块名
+      Group() string // 模块组
+      Start()        // 模块启动函数
+      Enable() bool  // 模块启用
+  }
+#+END_SRC
+
+*Module* 是一个接口类型，该类型接口拥有4个方法。
+*Name* 、 *Group* 用来获取该模块的名称和组。
+*Enable* 用来表明该模块是否启用。
+*Start* 则是启动模块的函数。通常情况下，在模块的该函数中会对beehive发送的信息进行监听处理。
+
+** 如何将模块注册到beehive中
+
+beehive库中提供了 *Register* 的方法用于注册模块。
+
+在注册过程中会根据模块的 *Enable* 方法返回的值来判断该模块是否启用。
+未启用的模块会放到disabledModules中，目前看来没什么用。
+
+#+BEGIN_SRC go
+  // 注册模块
+  func Register(m Module) {
+      if m.Enable() {
+          modules[m.Name()] = m
+          klog.Infof("Module %v registered successfully", m.Name())
+      } else {
+          disabledModules[m.Name()] = m
+          klog.Warningf("Module %v is disabled, do not register", m.Name())
+      }
+  }
+#+END_SRC
+
+* InitContext-内部实现
+*StartModules* 函数中调用的 *beehiveContext.InitContext* 对beehive包中的全局变量 *context* 进行了初始化。
+
+从代码中我们也不难看出，目前只支持了一种类型(channel)。
+#+BEGIN_SRC go
+  var (
+      // beehiveContext上下文，单例
+      context *beehiveContext
+      once    sync.Once
+  )
+
+  func InitContext(contextType string) {
+      once.Do(func() {
+          ctx, cancel := gocontext.WithCancel(gocontext.Background())
+          context = &beehiveContext{
+              ctx:    ctx,
+              cancel: cancel,
+          }
+          switch contextType {
+          case MsgCtxTypeChannel: // 基于channel的实现
+              channelContext := NewChannelContext()
+              context.messageContext = channelContext
+              context.moduleContext = channelContext
+          default:
+              klog.Fatalf("Do not support context type:%s", contextType)
+          }
+      })
+  }
+#+END_SRC
+
+该变量是一个单例，其类型是 *beehiveContext* ，在实际的发送、接受消息都使用该变量。
+变量包含了4个字段。
+
+1. moduleContext，模块相关方法实现
+2. messageContext，收发信息相关的方法实现
+3. ctx
+4. cancel
+
+#+BEGIN_SRC go
+  type beehiveContext struct {
+      moduleContext  ModuleContext // 模块相关方法实现
+      messageContext MessageContext // 收发信息相关方法实现
+      ctx            gocontext.Context
+      cancel         gocontext.CancelFunc
+  }
+#+END_SRC
+
+从这些字段类型的定义也可以看出来
+*moduleContext* 主要负责对模块的添加删除操作， *messageContext* 主要负责对消息的发送接受操作。
+
+* ChannelContext-基于channel的beehiveContext实现
+在初始化函数中主要对存放数据的各个字段进行了初始化。
+
+- *channels* 存放不同module对应的channel。可以通过该变量监听发送给指定module的消息。
+- *typeChannels* 存放不同group下不同module对应的channel。可以通过该变量给指定的group下的所有module发送消息。
+- *anonChannels*
+
+#+BEGIN_SRC go
+  func NewChannelContext() *ChannelContext {
+      channelMap := make(map[string]chan model.Message)
+      moduleChannels := make(map[string]map[string]chan model.Message)
+      anonChannels := make(map[string]chan model.Message)
+      return &ChannelContext{
+          channels:     channelMap, // 存放单模块的channel，key为模块名，value为channel。
+          typeChannels: moduleChannels, // 存放group中的所有channel，key为组名，value为以模块名为key、channel为value的map。
+          anonChannels: anonChannels, // 匿名channel，用于接受同步消息的响应消息。
+      }
+  }
+#+END_SRC
+
+** ModuleContext-模块相关的实现
+该接口类型需要实现如下三个方法
+1. AddModule(module string)
+2. AddModuleGroup(module, group string)
+3. Cleanup(module string)
+
+*** AddModule
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L370][AddModule]]用于在beehive启动前，对模块添加注册的操作。
+
+1. 声明一个新的channel，缓冲长度为1024
+2. 以module为key，将其存入channels中。
+
+#+BEGIN_SRC go
+  // AddModule adds module into module context
+  func (ctx *ChannelContext) AddModule(module string) {
+      channel := ctx.newChannel()
+      ctx.addChannel(module, channel)
+  }
+#+END_SRC
+
+*** AddModuleGroup
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L376][AddModuleGroup]]用于将指定模块加入到指定组中。
+
+1. 从channels中读取指定名称模块对应的channel。
+2. 将该模块的channel以group为key存入到typeChannels的数组中。
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) AddModuleGroup(module, group string) {
+      if channel := ctx.getChannel(module); channel != nil {
+          ctx.addTypeChannel(module, group, channel)
+          return
+      }
+      klog.Warningf("Get bad module name %s when addmodulegroup", module)
+  }
+#+END_SRC
+
+*** Cleanup
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L49][Cleanup]]用于将指定的模块从channels和typeChannels中删除。
+
+1. 检查channels中是否有名为module的channel
+2. 从各处（包括channels和typeChannels）移除channel
+3. 20毫秒之后关闭channel
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) Cleanup(module string) {
+      if channel := ctx.getChannel(module); channel != nil {
+          ctx.delChannel(module)
+          time.Sleep(20 * time.Millisecond)
+          close(channel)
+      }
+  }
+#+END_SRC
+
+** MessageContext-消息相关的实现
+该接口类型主要实现以下6个方法
+1. Send(module string, message model.Message)
+2. Receive(module string) (model.Message, error)
+3. SendSync(module string, message model.Message, timeout time.Duration) (model.Message, error)
+4. SendResp(message model.Message)
+5. SendToGroup(moduleType string, message model.Message)
+6. SendToGroupSync(moduleType string, message model.Message, timeout time.Duration) error
+
+*** Send
+[[https://github.com/kubeedge/kubeedge/blob/master/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L59][Send]]用于发送消息到指定模块。
+
+根据模块名称找到对应的channel，再将消息放入channel，等待对应的模块监听消费。
+
+defer部分用于处理对应模块的channel因为各种原因关闭导后，向channel中放入消息致程序panic的问题。
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) Send(module string, message model.Message) {
+      defer func() {
+          if exception := recover(); exception != nil {
+              klog.Warningf("Recover when send message, exception: %+v", exception)
+          }
+      }()
+      if channel := ctx.getChannel(module); channel != nil {
+          channel <- message
+          return
+      }
+    klog.Warningf("Get bad module name :%s when send message, do nothing", module)
+  }
+#+END_SRC
+
+*** Receive
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L76][Receive]]用于消息的监听。
+
+根据模块名称找到对应的channel，通过监听channel获取其中消息，返回到上层处理。
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) Receive(module string) (model.Message, error) {
+      if channel := ctx.getChannel(module); channel != nil {
+          content := <-channel
+          return content, nil
+      }
+
+      klog.Warningf("Failed to get channel for module:%s when receive message", module)
+      return model.Message{}, fmt.Errorf("failed to get channel for module(%s)", module)
+  }
+#+END_SRC
+
+
+*** SendSync
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L91][SendSync]]用于发送同步消息。在给指定模块发送完消息后，在超时时间内等待对方的回应。
+
+在同步消息等待回应过程中，使用了一个临时的channel，该channel与消息的ID关联。
+对应的模块可以通过 *SendResp* 方法来同步响应消息。
+
+1. 给消息打上 *同步* 标记，设置 *Sync* 为 *true* 。
+2. 发送消息。
+3. 创建一个临时channel，用于接收响应的消息。
+4. 等待响应。
+5. 返回响应。
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) SendSync(module string, message model.Message, timeout time.Duration) (model.Message, error) {
+      // ... recover panic && timeout setting
+      message.Header.Sync = true
+      reqChannel := ctx.getChannel(module)
+      if reqChannel == nil {
+          return model.Message{}, fmt.Errorf("bad request module name(%s)", module)
+      }
+
+      sendTimer := time.NewTimer(timeout)
+      select {
+      case reqChannel <- message:
+      case <-sendTimer.C:
+          return model.Message{}, errors.New("timeout to send message")
+      }
+      sendTimer.Stop()
+
+      anonChan := make(chan model.Message)
+      anonName := getAnonChannelName(message.GetID())
+      ctx.anonChsLock.Lock()
+      ctx.anonChannels[anonName] = anonChan
+      ctx.anonChsLock.Unlock()
+
+      // ... defer delete annoChannels && close anonChan
+
+      var resp model.Message
+      select {
+      case resp = <-anonChan:
+      case <-respTimer.C:
+          return model.Message{}, errors.New("timeout to get response")
+      }
+
+      return resp, nil
+  }
+#+END_SRC
+
+*** SendResp
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L148][SendResp]]用于回应同步消息。
+
+根据父消息的ID获取到匿名channel并向其中传入要回应的信息。
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) SendResp(message model.Message) {
+      anonName := getAnonChannelName(message.GetParentID())
+
+      ctx.anonChsLock.RLock()
+      defer ctx.anonChsLock.RUnlock()
+      if channel, exist := ctx.anonChannels[anonName]; exist {
+          channel <- message
+          return
+      }
+
+      klog.V(4).Infof("Get bad anonName:%s when sendresp message, do nothing", anonName)
+  }
+#+END_SRC
+
+
+*** SendToGroup
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L162][SendToGroup]]用于向群组发送消息。
+
+根据要发送到目标group，如果该group存在，则遍历group中所有的channel向其发送消息。
+
+#+BEGIN_SRC go
+  // SendToGroup send msg to modules. Todo: do not stuck
+  func (ctx *ChannelContext) SendToGroup(moduleType string, message model.Message) {
+      // ... recover panic
+      send := func(ch chan model.Message) {
+      // ... ch <- message
+      }
+      if channelList := ctx.getTypeChannel(moduleType); channelList != nil {
+          for _, channel := range channelList {
+              go send(channel)
+          }
+          return
+      }
+      klog.Warningf("Get bad module type:%s when sendToGroup message, do nothing", moduleType)
+  }
+#+END_SRC
+
+*** SendToGroupSync
+[[https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context_channel.go#L192][SendToGroupSync]]用于向群组发送同步消息。
+
+与对模块之间发送同步消息类似，会给组内的每个模块发送消息。但有区别的在于使用channel切片来接受组内不同模块回应的消息。
+
+当所有模块都回应了本次消息后，则表示发送同步消息完成，对变量进行回收处理。
+
+1. 根据组名获取要发送的channel列表。
+2. 生成对应的用于接收回应消息的匿名channel，其容量与channel列表长度一致。
+3. 对所有channel都发送一条message。
+4. 监听匿名channel的长度，当内部包含的消息数与channel列表长度一致时，说明组内所有模块都回应了。
+5. 清理内存资源。检查回应的信息的ParentID与刚刚发送的MessageID是否一致，如果不一致则说明有消息“串台”了，输出异常日志。
+
+#+BEGIN_SRC go
+  func (ctx *ChannelContext) SendToGroupSync(moduleType string, message model.Message, timeout time.Duration) error {
+      ...
+      channelList := ctx.getTypeChannel(moduleType)
+      if channelList == nil {
+          return fmt.Errorf("failed to get module type(%s) channel list", moduleType)
+      }
+
+      channelNumber := len(channelList)
+      anonChan := make(chan model.Message, channelNumber)
+      anonName := getAnonChannelName(message.GetID())
+      ctx.anonChsLock.Lock()
+      ctx.anonChannels[anonName] = anonChan
+      ctx.anonChsLock.Unlock()
+
+      cleanup := func() error { ... }
+      message.Header.Sync = true
+      var timeoutCounter int32
+      send := func(ch chan model.Message) { ... }
+      for _, channel := range channelList {
+          go send(channel)
+      }
+
+      sendTimer := time.NewTimer(time.Until(deadline))
+      ticker := time.NewTicker(TickerTimeoutDefault)
+      for {
+          if len(anonChan) == channelNumber {
+              break
+          }
+          select {
+          case <-ticker.C:
+          case <-sendTimer.C:
+              // ...timeout
+          }
+      }
+
+      return cleanup()
+  }
+#+END_SRC

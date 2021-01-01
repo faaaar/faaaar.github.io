@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh"><meta charset="utf-8"><meta name="generator" content="Hugo 0.79.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>KUBEEDGE - 模块之间的通信机制&nbsp;&ndash;&nbsp;gccio.com</title><link rel="stylesheet" href="/css/core.min.34177bb140bda75c5226cdee3aae65595491ec58425d2a3bd01c2774b6f23162bd498b7e9ccb1ab4031d711b959df415.css" integrity="sha384-NBd7sUC9p1xSJs3uOq5lWVSR7FhCXSo70BwndLbyMWK9SYt&#43;nMsatAMdcRuVnfQV"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="KUBEEDGE - 模块之间的通信机制" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="/"><span class="site name">gccio.com</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="/categories/">分类</a><a class="nav item" href="/tags/">标签</a></nav></div></span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">KUBEEDGE - 模块之间的通信机制</h1><p class="article date">2020-11-11</p></section><article class="article markdown-body"><p>KubeEdge的cloudcore和edgecore都是由很多模块组成的。而模块之间的通信，则是使用了一个名为 <strong>beehive</strong> 的组件实现的。</p>
+<p><strong>beehive</strong> 组件虽然以单独的包发布出去了，但在KubeEdge中并未使用 <strong>go mod</strong> 的方式引入。
+而是将组件存放于 <strong>staging</strong> 文件夹下。</p>
+<p>找到代码后，开始通过阅读代码的方式了解该组件，进而了解KubeEdge模块之间的通信机制。</p>
+<p>从cloudcore的入口代码(/cloud/app/server.go)中看到，beehive组件启动是通过 <strong>core.Run</strong> 启动的。
+所以先从 <strong>github.com/kubeedge/beehive/pkg/core</strong> 这个包看起。</p>
+<h2 id="core-dot-run-beehive启动">core.Run-Beehive启动</h2>
+<p>该函数非常简单，就做了两件事</p>
+<ol>
+<li>启动所有注册到beehive中的模块，执行模块的 <strong>Start</strong> 函数。</li>
+<li>优雅退出。</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// beehive的启动函数，在启动时候会执行所有注册模块的Start方法
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">Run</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// 启动所有注册模块
+</span><span class="c1"></span>    <span class="nf">StartModules</span><span class="p">()</span>
+    <span class="c1">// 监听系统信号，优雅退出
+</span><span class="c1"></span>    <span class="nf">GracefulShutdown</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div><p>优雅退出这部分与beehive的功能关系不大，所以不关注。</p>
+<p>StartModules函数则是整个组件启动的关键所在。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">StartModules</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">beehiveContext</span><span class="p">.</span><span class="nf">InitContext</span><span class="p">(</span><span class="nx">beehiveContext</span><span class="p">.</span><span class="nx">MsgCtxTypeChannel</span><span class="p">)</span>
+    <span class="c1">// 获取所有注册的模块
+</span><span class="c1"></span>    <span class="nx">modules</span> <span class="o">:=</span> <span class="nf">GetModules</span><span class="p">()</span>
+    <span class="k">for</span> <span class="nx">name</span><span class="p">,</span> <span class="nx">module</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">modules</span> <span class="p">{</span>
+        <span class="c1">// 添加模块，并为模块创建一个channel用于接收消息
+</span><span class="c1"></span>        <span class="nx">beehiveContext</span><span class="p">.</span><span class="nf">AddModule</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span>
+        <span class="c1">// 添加该模块到所属的组
+</span><span class="c1"></span>        <span class="nx">beehiveContext</span><span class="p">.</span><span class="nf">AddModuleGroup</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">module</span><span class="p">.</span><span class="nf">Group</span><span class="p">())</span>
+        <span class="c1">// 启动模块
+</span><span class="c1"></span>        <span class="k">go</span> <span class="nx">module</span><span class="p">.</span><span class="nf">Start</span><span class="p">()</span>
+        <span class="nx">klog</span><span class="p">.</span><span class="nf">Infof</span><span class="p">(</span><span class="s">&#34;Starting module %v&#34;</span><span class="p">,</span> <span class="nx">name</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><p>首先通过 <strong>beehiveContext.InitContext</strong> 函数初始化了beehiveContext，确定了使用channel作为信息传输的方式。
+实际上beehive目前也只实现了channel的方式。对于 <strong>ChannelContext</strong> 的具体实现后面再聊。</p>
+<p>然后获取所有注册的模块，遍历模块将模块和模块所属的组加入到上下文中，启动模块。</p>
+<p>此处有两个问题</p>
+<ol>
+<li>如何声明定义一个模块</li>
+<li>如何将模块注册到beehive中</li>
+</ol>
+<h3 id="如何声明定义一个模块">如何声明定义一个模块</h3>
+<p>由于beehive的modules中存放的是 <strong>Module</strong> 类型的数据。所以定义一个模块只要实现了 <strong>Module</strong> 接口即可。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">Module</span> <span class="kd">interface</span> <span class="p">{</span>
+    <span class="nf">Name</span><span class="p">()</span> <span class="kt">string</span>  <span class="c1">// 模块名
+</span><span class="c1"></span>    <span class="nf">Group</span><span class="p">()</span> <span class="kt">string</span> <span class="c1">// 模块组
+</span><span class="c1"></span>    <span class="nf">Start</span><span class="p">()</span>        <span class="c1">// 模块启动函数
+</span><span class="c1"></span>    <span class="nf">Enable</span><span class="p">()</span> <span class="kt">bool</span>  <span class="c1">// 模块启用
+</span><span class="c1"></span><span class="p">}</span>
+</code></pre></div><p><strong>Module</strong> 是一个接口类型，该类型接口拥有4个方法。
+<strong>Name</strong> 、 <strong>Group</strong> 用来获取该模块的名称和组。
+<strong>Enable</strong> 用来表明该模块是否启用。
+<strong>Start</strong> 则是启动模块的函数。通常情况下，在模块的该函数中会对beehive发送的信息进行监听处理。</p>
+<h3 id="如何将模块注册到beehive中">如何将模块注册到beehive中</h3>
+<p>beehive库中提供了 <strong>Register</strong> 的方法用于注册模块。</p>
+<p>在注册过程中会根据模块的 <strong>Enable</strong> 方法返回的值来判断该模块是否启用。
+未启用的模块会放到disabledModules中，目前看来没什么用。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// 注册模块
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">Register</span><span class="p">(</span><span class="nx">m</span> <span class="nx">Module</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="nx">m</span><span class="p">.</span><span class="nf">Enable</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">modules</span><span class="p">[</span><span class="nx">m</span><span class="p">.</span><span class="nf">Name</span><span class="p">()]</span> <span class="p">=</span> <span class="nx">m</span>
+        <span class="nx">klog</span><span class="p">.</span><span class="nf">Infof</span><span class="p">(</span><span class="s">&#34;Module %v registered successfully&#34;</span><span class="p">,</span> <span class="nx">m</span><span class="p">.</span><span class="nf">Name</span><span class="p">())</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">disabledModules</span><span class="p">[</span><span class="nx">m</span><span class="p">.</span><span class="nf">Name</span><span class="p">()]</span> <span class="p">=</span> <span class="nx">m</span>
+        <span class="nx">klog</span><span class="p">.</span><span class="nf">Warningf</span><span class="p">(</span><span class="s">&#34;Module %v is disabled, do not register&#34;</span><span class="p">,</span> <span class="nx">m</span><span class="p">.</span><span class="nf">Name</span><span class="p">())</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><h2 id="initcontext-内部实现">InitContext-内部实现</h2>
+<p><strong>StartModules</strong> 函数中调用的 <strong>beehiveContext.InitContext</strong> 对beehive包中的全局变量 <strong>context</strong> 进行了初始化。</p>
+<p>从代码中我们也不难看出，目前只支持了一种类型(channel)。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">var</span> <span class="p">(</span>
+    <span class="c1">// beehiveContext上下文，单例
+</span><span class="c1"></span>    <span class="nx">context</span> <span class="o">*</span><span class="nx">beehiveContext</span>
+    <span class="nx">once</span>    <span class="nx">sync</span><span class="p">.</span><span class="nx">Once</span>
+<span class="p">)</span>
+
+<span class="kd">func</span> <span class="nf">InitContext</span><span class="p">(</span><span class="nx">contextType</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">once</span><span class="p">.</span><span class="nf">Do</span><span class="p">(</span><span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">ctx</span><span class="p">,</span> <span class="nx">cancel</span> <span class="o">:=</span> <span class="nx">gocontext</span><span class="p">.</span><span class="nf">WithCancel</span><span class="p">(</span><span class="nx">gocontext</span><span class="p">.</span><span class="nf">Background</span><span class="p">())</span>
+        <span class="nx">context</span> <span class="p">=</span> <span class="o">&amp;</span><span class="nx">beehiveContext</span><span class="p">{</span>
+            <span class="nx">ctx</span><span class="p">:</span>    <span class="nx">ctx</span><span class="p">,</span>
+            <span class="nx">cancel</span><span class="p">:</span> <span class="nx">cancel</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">switch</span> <span class="nx">contextType</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="nx">MsgCtxTypeChannel</span><span class="p">:</span> <span class="c1">// 基于channel的实现
+</span><span class="c1"></span>            <span class="nx">channelContext</span> <span class="o">:=</span> <span class="nf">NewChannelContext</span><span class="p">()</span>
+            <span class="nx">context</span><span class="p">.</span><span class="nx">messageContext</span> <span class="p">=</span> <span class="nx">channelContext</span>
+            <span class="nx">context</span><span class="p">.</span><span class="nx">moduleContext</span> <span class="p">=</span> <span class="nx">channelContext</span>
+        <span class="k">default</span><span class="p">:</span>
+            <span class="nx">klog</span><span class="p">.</span><span class="nf">Fatalf</span><span class="p">(</span><span class="s">&#34;Do not support context type:%s&#34;</span><span class="p">,</span> <span class="nx">contextType</span><span class="p">)</span>
+        <span class="p">}</span>
+    <span class="p">})</span>
+<span class="p">}</span>
+</code></pre></div><p>该变量是一个单例，其类型是 <strong>beehiveContext</strong> ，在实际的发送、接受消息都使用该变量。
+变量包含了4个字段。</p>
+<ol>
+<li>moduleContext，模块相关方法实现</li>
+<li>messageContext，收发信息相关的方法实现</li>
+<li>ctx</li>
+<li>cancel</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">beehiveContext</span> <span class="kd">struct</span> <span class="p">{</span>
+    <span class="nx">moduleContext</span>  <span class="nx">ModuleContext</span> <span class="c1">// 模块相关方法实现
+</span><span class="c1"></span>    <span class="nx">messageContext</span> <span class="nx">MessageContext</span> <span class="c1">// 收发信息相关方法实现
+</span><span class="c1"></span>    <span class="nx">ctx</span>            <span class="nx">gocontext</span><span class="p">.</span><span class="nx">Context</span>
+    <span class="nx">cancel</span>         <span class="nx">gocontext</span><span class="p">.</span><span class="nx">CancelFunc</span>
+<span class="p">}</span>
+</code></pre></div><p>从这些字段类型的定义也可以看出来
+<strong>moduleContext</strong> 主要负责对模块的添加删除操作， <strong>messageContext</strong> 主要负责对消息的发送接受操作。</p>
+<h2 id="channelcontext-基于channel的beehivecontext实现">ChannelContext-基于channel的beehiveContext实现</h2>
+<p>在初始化函数中主要对存放数据的各个字段进行了初始化。</p>
+<ul>
+<li><strong>channels</strong> 存放不同module对应的channel。可以通过该变量监听发送给指定module的消息。</li>
+<li><strong>typeChannels</strong> 存放不同group下不同module对应的channel。可以通过该变量给指定的group下的所有module发送消息。</li>
+<li><strong>anonChannels</strong></li>
+</ul>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">NewChannelContext</span><span class="p">()</span> <span class="o">*</span><span class="nx">ChannelContext</span> <span class="p">{</span>
+    <span class="nx">channelMap</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span>
+    <span class="nx">moduleChannels</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span>
+    <span class="nx">anonChannels</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span>
+    <span class="k">return</span> <span class="o">&amp;</span><span class="nx">ChannelContext</span><span class="p">{</span>
+        <span class="nx">channels</span><span class="p">:</span>     <span class="nx">channelMap</span><span class="p">,</span> <span class="c1">// 存放单模块的channel，key为模块名，value为channel。
+</span><span class="c1"></span>        <span class="nx">typeChannels</span><span class="p">:</span> <span class="nx">moduleChannels</span><span class="p">,</span> <span class="c1">// 存放group中的所有channel，key为组名，value为以模块名为key、channel为value的map。
+</span><span class="c1"></span>        <span class="nx">anonChannels</span><span class="p">:</span> <span class="nx">anonChannels</span><span class="p">,</span> <span class="c1">// 匿名channel，用于接受同步消息的响应消息。
+</span><span class="c1"></span>    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><h3 id="modulecontext-模块相关的实现">ModuleContext-模块相关的实现</h3>
+<p>该接口类型需要实现如下三个方法</p>
+<ol>
+<li>AddModule(module string)</li>
+<li>AddModuleGroup(module, group string)</li>
+<li>Cleanup(module string)</li>
+</ol>
+<h4 id="addmodule">AddModule</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L370"target="_blank">AddModule</a>用于在beehive启动前，对模块添加注册的操作。</p>
+<ol>
+<li>声明一个新的channel，缓冲长度为1024</li>
+<li>以module为key，将其存入channels中。</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// AddModule adds module into module context
+</span><span class="c1"></span><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">AddModule</span><span class="p">(</span><span class="nx">module</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">channel</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">newChannel</span><span class="p">()</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nf">addChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">,</span> <span class="nx">channel</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="addmodulegroup">AddModuleGroup</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L376"target="_blank">AddModuleGroup</a>用于将指定模块加入到指定组中。</p>
+<ol>
+<li>从channels中读取指定名称模块对应的channel。</li>
+<li>将该模块的channel以group为key存入到typeChannels的数组中。</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">AddModuleGroup</span><span class="p">(</span><span class="nx">module</span><span class="p">,</span> <span class="nx">group</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="nx">channel</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">);</span> <span class="nx">channel</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="nx">ctx</span><span class="p">.</span><span class="nf">addTypeChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">,</span> <span class="nx">group</span><span class="p">,</span> <span class="nx">channel</span><span class="p">)</span>
+        <span class="k">return</span>
+    <span class="p">}</span>
+    <span class="nx">klog</span><span class="p">.</span><span class="nf">Warningf</span><span class="p">(</span><span class="s">&#34;Get bad module name %s when addmodulegroup&#34;</span><span class="p">,</span> <span class="nx">module</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="cleanup">Cleanup</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L49"target="_blank">Cleanup</a>用于将指定的模块从channels和typeChannels中删除。</p>
+<ol>
+<li>检查channels中是否有名为module的channel</li>
+<li>从各处（包括channels和typeChannels）移除channel</li>
+<li>20毫秒之后关闭channel</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">Cleanup</span><span class="p">(</span><span class="nx">module</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="nx">channel</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">);</span> <span class="nx">channel</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="nx">ctx</span><span class="p">.</span><span class="nf">delChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">)</span>
+        <span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="mi">20</span> <span class="o">*</span> <span class="nx">time</span><span class="p">.</span><span class="nx">Millisecond</span><span class="p">)</span>
+        <span class="nb">close</span><span class="p">(</span><span class="nx">channel</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><h3 id="messagecontext-消息相关的实现">MessageContext-消息相关的实现</h3>
+<p>该接口类型主要实现以下6个方法</p>
+<ol>
+<li>Send(module string, message model.Message)</li>
+<li>Receive(module string) (model.Message, error)</li>
+<li>SendSync(module string, message model.Message, timeout time.Duration) (model.Message, error)</li>
+<li>SendResp(message model.Message)</li>
+<li>SendToGroup(moduleType string, message model.Message)</li>
+<li>SendToGroupSync(moduleType string, message model.Message, timeout time.Duration) error</li>
+</ol>
+<h4 id="send">Send</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/master/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L59"target="_blank">Send</a>用于发送消息到指定模块。</p>
+<p>根据模块名称找到对应的channel，再将消息放入channel，等待对应的模块监听消费。</p>
+<p>defer部分用于处理对应模块的channel因为各种原因关闭导后，向channel中放入消息致程序panic的问题。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">Send</span><span class="p">(</span><span class="nx">module</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">message</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">defer</span> <span class="kd">func</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="nx">exception</span> <span class="o">:=</span> <span class="nb">recover</span><span class="p">();</span> <span class="nx">exception</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+            <span class="nx">klog</span><span class="p">.</span><span class="nf">Warningf</span><span class="p">(</span><span class="s">&#34;Recover when send message, exception: %+v&#34;</span><span class="p">,</span> <span class="nx">exception</span><span class="p">)</span>
+        <span class="p">}</span>
+    <span class="p">}()</span>
+    <span class="k">if</span> <span class="nx">channel</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">);</span> <span class="nx">channel</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="nx">channel</span> <span class="o">&lt;-</span> <span class="nx">message</span>
+        <span class="k">return</span>
+    <span class="p">}</span>
+  <span class="nx">klog</span><span class="p">.</span><span class="nf">Warningf</span><span class="p">(</span><span class="s">&#34;Get bad module name :%s when send message, do nothing&#34;</span><span class="p">,</span> <span class="nx">module</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="receive">Receive</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L76"target="_blank">Receive</a>用于消息的监听。</p>
+<p>根据模块名称找到对应的channel，通过监听channel获取其中消息，返回到上层处理。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">Receive</span><span class="p">(</span><span class="nx">module</span> <span class="kt">string</span><span class="p">)</span> <span class="p">(</span><span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="nx">channel</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">);</span> <span class="nx">channel</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="nx">content</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">channel</span>
+        <span class="k">return</span> <span class="nx">content</span><span class="p">,</span> <span class="kc">nil</span>
+    <span class="p">}</span>
+
+    <span class="nx">klog</span><span class="p">.</span><span class="nf">Warningf</span><span class="p">(</span><span class="s">&#34;Failed to get channel for module:%s when receive message&#34;</span><span class="p">,</span> <span class="nx">module</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">{},</span> <span class="nx">fmt</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;failed to get channel for module(%s)&#34;</span><span class="p">,</span> <span class="nx">module</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="sendsync">SendSync</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L91"target="_blank">SendSync</a>用于发送同步消息。在给指定模块发送完消息后，在超时时间内等待对方的回应。</p>
+<p>在同步消息等待回应过程中，使用了一个临时的channel，该channel与消息的ID关联。
+对应的模块可以通过 <strong>SendResp</strong> 方法来同步响应消息。</p>
+<ol>
+<li>给消息打上 <strong>同步</strong> 标记，设置 <strong>Sync</strong> 为 <strong>true</strong> 。</li>
+<li>发送消息。</li>
+<li>创建一个临时channel，用于接收响应的消息。</li>
+<li>等待响应。</li>
+<li>返回响应。</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">SendSync</span><span class="p">(</span><span class="nx">module</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">message</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">,</span> <span class="nx">timeout</span> <span class="nx">time</span><span class="p">.</span><span class="nx">Duration</span><span class="p">)</span> <span class="p">(</span><span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">,</span> <span class="kt">error</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... recover panic &amp;&amp; timeout setting
+</span><span class="c1"></span>    <span class="nx">message</span><span class="p">.</span><span class="nx">Header</span><span class="p">.</span><span class="nx">Sync</span> <span class="p">=</span> <span class="kc">true</span>
+    <span class="nx">reqChannel</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getChannel</span><span class="p">(</span><span class="nx">module</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nx">reqChannel</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">{},</span> <span class="nx">fmt</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;bad request module name(%s)&#34;</span><span class="p">,</span> <span class="nx">module</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="nx">sendTimer</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">NewTimer</span><span class="p">(</span><span class="nx">timeout</span><span class="p">)</span>
+    <span class="k">select</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="nx">reqChannel</span> <span class="o">&lt;-</span> <span class="nx">message</span><span class="p">:</span>
+    <span class="k">case</span> <span class="o">&lt;-</span><span class="nx">sendTimer</span><span class="p">.</span><span class="nx">C</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">{},</span> <span class="nx">errors</span><span class="p">.</span><span class="nf">New</span><span class="p">(</span><span class="s">&#34;timeout to send message&#34;</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="nx">sendTimer</span><span class="p">.</span><span class="nf">Stop</span><span class="p">()</span>
+
+    <span class="nx">anonChan</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span>
+    <span class="nx">anonName</span> <span class="o">:=</span> <span class="nf">getAnonChannelName</span><span class="p">(</span><span class="nx">message</span><span class="p">.</span><span class="nf">GetID</span><span class="p">())</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChsLock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChannels</span><span class="p">[</span><span class="nx">anonName</span><span class="p">]</span> <span class="p">=</span> <span class="nx">anonChan</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChsLock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+
+    <span class="c1">// ... defer delete annoChannels &amp;&amp; close anonChan
+</span><span class="c1"></span>
+    <span class="kd">var</span> <span class="nx">resp</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span>
+    <span class="k">select</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="nx">resp</span> <span class="p">=</span> <span class="o">&lt;-</span><span class="nx">anonChan</span><span class="p">:</span>
+    <span class="k">case</span> <span class="o">&lt;-</span><span class="nx">respTimer</span><span class="p">.</span><span class="nx">C</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">{},</span> <span class="nx">errors</span><span class="p">.</span><span class="nf">New</span><span class="p">(</span><span class="s">&#34;timeout to get response&#34;</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nx">resp</span><span class="p">,</span> <span class="kc">nil</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="sendresp">SendResp</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L148"target="_blank">SendResp</a>用于回应同步消息。</p>
+<p>根据父消息的ID获取到匿名channel并向其中传入要回应的信息。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">SendResp</span><span class="p">(</span><span class="nx">message</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">anonName</span> <span class="o">:=</span> <span class="nf">getAnonChannelName</span><span class="p">(</span><span class="nx">message</span><span class="p">.</span><span class="nf">GetParentID</span><span class="p">())</span>
+
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChsLock</span><span class="p">.</span><span class="nf">RLock</span><span class="p">()</span>
+    <span class="k">defer</span> <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChsLock</span><span class="p">.</span><span class="nf">RUnlock</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nx">channel</span><span class="p">,</span> <span class="nx">exist</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChannels</span><span class="p">[</span><span class="nx">anonName</span><span class="p">];</span> <span class="nx">exist</span> <span class="p">{</span>
+        <span class="nx">channel</span> <span class="o">&lt;-</span> <span class="nx">message</span>
+        <span class="k">return</span>
+    <span class="p">}</span>
+
+    <span class="nx">klog</span><span class="p">.</span><span class="nf">V</span><span class="p">(</span><span class="mi">4</span><span class="p">).</span><span class="nf">Infof</span><span class="p">(</span><span class="s">&#34;Get bad anonName:%s when sendresp message, do nothing&#34;</span><span class="p">,</span> <span class="nx">anonName</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="sendtogroup">SendToGroup</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L162"target="_blank">SendToGroup</a>用于向群组发送消息。</p>
+<p>根据要发送到目标group，如果该group存在，则遍历group中所有的channel向其发送消息。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// SendToGroup send msg to modules. Todo: do not stuck
+</span><span class="c1"></span><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">SendToGroup</span><span class="p">(</span><span class="nx">moduleType</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">message</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... recover panic
+</span><span class="c1"></span>    <span class="nx">send</span> <span class="o">:=</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ch</span> <span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... ch &lt;- message
+</span><span class="c1"></span>    <span class="p">}</span>
+    <span class="k">if</span> <span class="nx">channelList</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getTypeChannel</span><span class="p">(</span><span class="nx">moduleType</span><span class="p">);</span> <span class="nx">channelList</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">channel</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">channelList</span> <span class="p">{</span>
+            <span class="k">go</span> <span class="nf">send</span><span class="p">(</span><span class="nx">channel</span><span class="p">)</span>
+        <span class="p">}</span>
+        <span class="k">return</span>
+    <span class="p">}</span>
+    <span class="nx">klog</span><span class="p">.</span><span class="nf">Warningf</span><span class="p">(</span><span class="s">&#34;Get bad module type:%s when sendToGroup message, do nothing&#34;</span><span class="p">,</span> <span class="nx">moduleType</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><h4 id="sendtogroupsync">SendToGroupSync</h4>
+<p><a href="https://github.com/kubeedge/kubeedge/blob/be83fb417136ef7c91e9e353228050612d89f225/staging/src/github.com/kubeedge/beehive/pkg/core/context/context%5Fchannel.go#L192"target="_blank">SendToGroupSync</a>用于向群组发送同步消息。</p>
+<p>与对模块之间发送同步消息类似，会给组内的每个模块发送消息。但有区别的在于使用channel切片来接受组内不同模块回应的消息。</p>
+<p>当所有模块都回应了本次消息后，则表示发送同步消息完成，对变量进行回收处理。</p>
+<ol>
+<li>根据组名获取要发送的channel列表。</li>
+<li>生成对应的用于接收回应消息的匿名channel，其容量与channel列表长度一致。</li>
+<li>对所有channel都发送一条message。</li>
+<li>监听匿名channel的长度，当内部包含的消息数与channel列表长度一致时，说明组内所有模块都回应了。</li>
+<li>清理内存资源。检查回应的信息的ParentID与刚刚发送的MessageID是否一致，如果不一致则说明有消息“串台”了，输出异常日志。</li>
+</ol>
+<!--listend-->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="p">(</span><span class="nx">ctx</span> <span class="o">*</span><span class="nx">ChannelContext</span><span class="p">)</span> <span class="nf">SendToGroupSync</span><span class="p">(</span><span class="nx">moduleType</span> <span class="kt">string</span><span class="p">,</span> <span class="nx">message</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">,</span> <span class="nx">timeout</span> <span class="nx">time</span><span class="p">.</span><span class="nx">Duration</span><span class="p">)</span> <span class="kt">error</span> <span class="p">{</span>
+    <span class="o">...</span>
+    <span class="nx">channelList</span> <span class="o">:=</span> <span class="nx">ctx</span><span class="p">.</span><span class="nf">getTypeChannel</span><span class="p">(</span><span class="nx">moduleType</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nx">channelList</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nx">fmt</span><span class="p">.</span><span class="nf">Errorf</span><span class="p">(</span><span class="s">&#34;failed to get module type(%s) channel list&#34;</span><span class="p">,</span> <span class="nx">moduleType</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="nx">channelNumber</span> <span class="o">:=</span> <span class="nb">len</span><span class="p">(</span><span class="nx">channelList</span><span class="p">)</span>
+    <span class="nx">anonChan</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">,</span> <span class="nx">channelNumber</span><span class="p">)</span>
+    <span class="nx">anonName</span> <span class="o">:=</span> <span class="nf">getAnonChannelName</span><span class="p">(</span><span class="nx">message</span><span class="p">.</span><span class="nf">GetID</span><span class="p">())</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChsLock</span><span class="p">.</span><span class="nf">Lock</span><span class="p">()</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChannels</span><span class="p">[</span><span class="nx">anonName</span><span class="p">]</span> <span class="p">=</span> <span class="nx">anonChan</span>
+    <span class="nx">ctx</span><span class="p">.</span><span class="nx">anonChsLock</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">()</span>
+
+    <span class="nx">cleanup</span> <span class="o">:=</span> <span class="kd">func</span><span class="p">()</span> <span class="kt">error</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+    <span class="nx">message</span><span class="p">.</span><span class="nx">Header</span><span class="p">.</span><span class="nx">Sync</span> <span class="p">=</span> <span class="kc">true</span>
+    <span class="kd">var</span> <span class="nx">timeoutCounter</span> <span class="kt">int32</span>
+    <span class="nx">send</span> <span class="o">:=</span> <span class="kd">func</span><span class="p">(</span><span class="nx">ch</span> <span class="kd">chan</span> <span class="nx">model</span><span class="p">.</span><span class="nx">Message</span><span class="p">)</span> <span class="p">{</span> <span class="o">...</span> <span class="p">}</span>
+    <span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">channel</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">channelList</span> <span class="p">{</span>
+        <span class="k">go</span> <span class="nf">send</span><span class="p">(</span><span class="nx">channel</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="nx">sendTimer</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">NewTimer</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nf">Until</span><span class="p">(</span><span class="nx">deadline</span><span class="p">))</span>
+    <span class="nx">ticker</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">NewTicker</span><span class="p">(</span><span class="nx">TickerTimeoutDefault</span><span class="p">)</span>
+    <span class="k">for</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nx">anonChan</span><span class="p">)</span> <span class="o">==</span> <span class="nx">channelNumber</span> <span class="p">{</span>
+            <span class="k">break</span>
+        <span class="p">}</span>
+        <span class="k">select</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="o">&lt;-</span><span class="nx">ticker</span><span class="p">.</span><span class="nx">C</span><span class="p">:</span>
+        <span class="k">case</span> <span class="o">&lt;-</span><span class="nx">sendTimer</span><span class="p">.</span><span class="nx">C</span><span class="p">:</span>
+            <span class="c1">// ...timeout
+</span><span class="c1"></span>        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nf">cleanup</span><span class="p">()</span>
+<span class="p">}</span>
+</code></pre></div></article><section class="article labels"><a class="tag" href=/tags/kubeedge/>KUBEEDGE</a></section></div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="/posts/kubeedge/introduction/"><span class="iconfont icon-article"></span>KUBEEDGE - 简单了解Kubeedge的部分内容</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">© Copyright Gccio</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank">Notepadium</a></p></div></section></body>
+
+</html>

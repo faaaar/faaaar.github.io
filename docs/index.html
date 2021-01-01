@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh"><meta charset="utf-8"><meta name="generator" content="Hugo 0.79.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>gccio.com</title><link rel="stylesheet" href="/css/core.min.34177bb140bda75c5226cdee3aae65595491ec58425d2a3bd01c2774b6f23162bd498b7e9ccb1ab4031d711b959df415.css" integrity="sha384-NBd7sUC9p1xSJs3uOq5lWVSR7FhCXSo70BwndLbyMWK9SYt&#43;nMsatAMdcRuVnfQV"><link rel="alternate" type="application/rss+xml" href="/index.xml" title="gccio.com" /><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="gccio.com" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="/"><span class="site name">gccio.com</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="/categories/">分类</a><a class="nav item" href="/tags/">标签</a></nav></div></span></div></section><section id="content"><ul class="note list"><li class="item"><a class="note" href="/posts/kubeedge/beehive/">
+            <p class="note title">KUBEEDGE - 模块之间的通信机制</p><p class="note date">2020-11-11</p><p class="note content">KubeEdge的cloudcore和edgecore都是由很多模块组成的。而模块之间的通信，则是使用了一个名为 beehive 的组件实现的。
+<span class="mldr">&mldr;</span></p></a><p class="note labels"><a class="tag" href="/tags/kubeedge/">KUBEEDGE</a></p></li><li class="item"><a class="note" href="/posts/kubeedge/introduction/">
+            <p class="note title">KUBEEDGE - 简单了解Kubeedge的部分内容</p><p class="note date">2020-09-28</p><p class="note content">最近工作上做了一些调整，调整之后涉及到了Kubeedge相关的内容，公司业务上需要对边端节点进行管控，其中使用到了Kubeedge。 基于业务内容，我也对Kubeedge做了一些简单的了解。
+<span class="mldr">&mldr;</span></p></a><p class="note labels"><a class="tag" href="/tags/kubeedge/">KUBEEDGE</a></p></li><li class="item"><a class="note" href="/posts/ostep/v-mem/">
+            <p class="note title">OSTEP - 内存虚拟化</p><p class="note date">2020-09-26</p><p class="note content">程序内打出来的内存地址并非真实的物理内存地址，而是程序独有的虚拟内存地址。 操作系统为程序制造了一个独占了巨大的内存空间的假象，方便程序对内存<span class="mldr">&mldr;</span></p></a><p class="note labels"><a class="tag" href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AF%BC%E8%AE%BA/">操作系统导论</a></p></li><li class="item"><a class="note" href="/posts/ostep/v-cpu/">
+            <p class="note title">OSTEP - CPU虚拟化</p><p class="note date">2020-09-07</p><p class="note content">操作系统通过时分共享技术来共享资源。通过允许一个程序使用一小段时间，然后再给到另一个程序使用一小段时间来共享，让所有程序觉得自己有一个属于自己的CPU。
+<span class="mldr">&mldr;</span></p></a><p class="note labels"><a class="tag" href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AF%BC%E8%AE%BA/">操作系统导论</a></p></li><li class="item"><a class="note" href="/posts/snippet/build-progress-bar/">
+            <p class="note title"></p><p class="note content">使用Go实现进度条 &lt;!–more–&gt; package main import ( &#34;C&#34; &#34;fmt&#34; ) import ( &#34;os&#34; &#34;strings&#34; &#34;time&#34; ) func main() { for i := 0; i &lt; 50; i++ { time.Sleep(100 * time.Millisecond) h := strings.Repeat(&#34;=&#34;, i) + strings.Repeat(&#34; &#34;, 49-i) fmt.Printf(&#34;\r%.0f%%[%s]&#34;, float64(i)/49*100, h) os.Stdout.Sync() } fmt.Println(&#34;\nAll System Go!&#34;) }</p></a></li></ul></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">© Copyright Gccio</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank">Notepadium</a></p></div></section></body>
+
+</html>

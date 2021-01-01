@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Posts on gccio.com</title>
+    <link>/posts/</link>
+    <description>Recent content in Posts on gccio.com</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>zh-cn</language>
+    <copyright>© Copyright Gccio</copyright>
+    <lastBuildDate>Wed, 11 Nov 2020 00:00:00 +0800</lastBuildDate>
+    
+        <atom:link href="/posts/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title>KUBEEDGE - 模块之间的通信机制</title>
+      <link>/posts/kubeedge/beehive/</link>
+      <pubDate>Wed, 11 Nov 2020 00:00:00 +0800</pubDate>
+      
+      <guid>/posts/kubeedge/beehive/</guid>
+      <description>&lt;p&gt;KubeEdge的cloudcore和edgecore都是由很多模块组成的。而模块之间的通信，则是使用了一个名为 &lt;strong&gt;beehive&lt;/strong&gt; 的组件实现的。&lt;/p&gt;</description>
+      
+    </item>
+    
+    <item>
+      <title>KUBEEDGE - 简单了解Kubeedge的部分内容</title>
+      <link>/posts/kubeedge/introduction/</link>
+      <pubDate>Mon, 28 Sep 2020 00:00:00 +0800</pubDate>
+      
+      <guid>/posts/kubeedge/introduction/</guid>
+      <description>&lt;p&gt;最近工作上做了一些调整，调整之后涉及到了Kubeedge相关的内容，公司业务上需要对边端节点进行管控，其中使用到了Kubeedge。
+基于业务内容，我也对Kubeedge做了一些简单的了解。&lt;/p&gt;</description>
+      
+    </item>
+    
+    <item>
+      <title>OSTEP - 内存虚拟化</title>
+      <link>/posts/ostep/v-mem/</link>
+      <pubDate>Sat, 26 Sep 2020 00:00:00 +0800</pubDate>
+      
+      <guid>/posts/ostep/v-mem/</guid>
+      <description>程序内打出来的内存地址并非真实的物理内存地址，而是程序独有的虚拟内存地址。 操作系统为程序制造了一个独占了巨大的内存空间的假象，方便程序对内存</description>
+      
+    </item>
+    
+    <item>
+      <title>OSTEP - CPU虚拟化</title>
+      <link>/posts/ostep/v-cpu/</link>
+      <pubDate>Mon, 07 Sep 2020 00:00:00 +0800</pubDate>
+      
+      <guid>/posts/ostep/v-cpu/</guid>
+      <description>&lt;p&gt;操作系统通过时分共享技术来共享资源。通过允许一个程序使用一小段时间，然后再给到另一个程序使用一小段时间来共享，让所有程序觉得自己有一个属于自己的CPU。&lt;/p&gt;</description>
+      
+    </item>
+    
+    <item>
+      <title></title>
+      <link>/posts/snippet/build-progress-bar/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/posts/snippet/build-progress-bar/</guid>
+      <description>使用Go实现进度条 &amp;lt;!–more–&amp;gt; package main import ( &amp;#34;C&amp;#34; &amp;#34;fmt&amp;#34; ) import ( &amp;#34;os&amp;#34; &amp;#34;strings&amp;#34; &amp;#34;time&amp;#34; ) func main() { for i := 0; i &amp;lt; 50; i++ { time.Sleep(100 * time.Millisecond) h := strings.Repeat(&amp;#34;=&amp;#34;, i) + strings.Repeat(&amp;#34; &amp;#34;, 49-i) fmt.Printf(&amp;#34;\r%.0f%%[%s]&amp;#34;, float64(i)/49*100, h) os.Stdout.Sync() } fmt.Println(&amp;#34;\nAll System Go!&amp;#34;) }</description>
+      
+    </item>
+    
+  </channel>
+</rss>
